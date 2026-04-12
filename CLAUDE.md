@@ -25,14 +25,18 @@ cd build/web && python -m http.server 8080
 ## Deploy no GitHub Pages
 
 ```bash
-# Build com base-href (OBRIGATÓRIO para GitHub Pages)
-powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' build web --no-tree-shake-icons --release --pwa-strategy=none --base-href '/papel-create/'"
+# 1. Build com base-href (OBRIGATÓRIO para GitHub Pages)
+powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' build web --no-tree-shake-icons --release --pwa-strategy=none '--base-href=/papel-create/'"
 
-# Deploy
+# 2. Copiar build para FORA do repo (ao trocar branch o build some pois build/ é gitignored)
+rm -rf C:/Users/jhona/AppData/Local/Temp/papel-deploy
+powershell.exe -Command "Copy-Item -Path 'H:\Claude\Papelaria\analog_sync_project\build\web' -Destination 'C:\Users\jhona\AppData\Local\Temp\papel-deploy' -Recurse -Force"
+
+# 3. Deploy
 git stash
 git checkout gh-pages
-cp -r build/web/. .
-git add .
+powershell.exe -Command "Copy-Item -Path 'C:\Users\jhona\AppData\Local\Temp\papel-deploy\*' -Destination 'H:\Claude\Papelaria\analog_sync_project' -Recurse -Force"
+git add -A
 git commit -m "deploy: <descrição>"
 git push origin gh-pages
 git checkout main
