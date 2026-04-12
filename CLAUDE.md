@@ -9,20 +9,40 @@ Aplicativo Flutter da marca **Papel & Create** que digitaliza páginas de cadern
 ## Como rodar
 
 ```bash
-# Build (SEMPRE usar estas flags — veja seção "Armadilhas conhecidas")
+# Build local (SEMPRE usar estas flags)
 cd H:\Claude\Papelaria\analog_sync_project
+rm -rf .dart_tool/flutter_build
+powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' pub get"
 powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' build web --no-tree-shake-icons --release --pwa-strategy=none"
 
 # Servidor local (após o build)
-powershell.exe -Command "Start-Process python -ArgumentList '-m http.server 8080' -WorkingDirectory 'H:\Claude\Papelaria\analog_sync_project\build\web'"
+cd build/web && python -m http.server 8080
 # Acesse: http://localhost:8080
-
-# Primeira vez ou após troca de dependências: limpar cache do build antes
-rm -rf .dart_tool/flutter_build
-powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' pub get"
 ```
 
 > **Teste em aba anônima** na primeira abertura após um novo build para evitar interferência de service worker antigo no cache do browser.
+
+## Deploy no GitHub Pages
+
+```bash
+# Build com base-href (OBRIGATÓRIO para GitHub Pages)
+powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' build web --no-tree-shake-icons --release --pwa-strategy=none --base-href '/papel-create/'"
+
+# Deploy
+git stash
+git checkout gh-pages
+cp -r build/web/. .
+git add .
+git commit -m "deploy: <descrição>"
+git push origin gh-pages
+git checkout main
+git stash pop
+```
+
+- **URL pública:** `https://victoriatheodoro.github.io/papel-create/`
+- **Repositório:** `github.com/victoriatheodoro/papel-create`
+- Branch `main` = código-fonte | Branch `gh-pages` = build web publicado
+- **IMPORTANTE:** build local usa sem `--base-href`; deploy GitHub Pages usa `--base-href '/papel-create/'`. Sem essa flag o app abre em branco no GitHub Pages.
 
 ---
 
@@ -30,21 +50,22 @@ powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter
 
 ```
 lib/
-├── main.dart                        # Ponto de entrada, rotas, tema
+├── main.dart                        # Ponto de entrada, rotas, tema, WidgetsFlutterBinding.ensureInitialized()
 ├── models/
 │   ├── scan_result.dart             # TaskItem, EventItem, ScanResult
 │   └── activity_group.dart          # ActivityGroup (grupos/blocos)
 ├── screens/
 │   ├── splash_screen.dart           # Splash: logo sobre fundo escuro por 2s
-│   ├── home_screen.dart             # Tela principal: logo, "Vencendo", grupos, entrada manual
+│   ├── home_screen.dart             # Tela principal: logo, "Vencendo", grupos, entrada manual, sync Todoist
 │   ├── group_detail_screen.dart     # Detalhe de um grupo: tarefas e eventos
 │   ├── review_screen.dart           # Revisão de scan antes de salvar
 │   ├── history_screen.dart          # Histórico de scans
-│   └── settings_screen.dart        # Configurações (API key)
+│   └── settings_screen.dart        # Configurações (Gemini API key + Todoist token)
 └── services/
     ├── ocr_service.dart             # Fachada com import condicional
-    ├── ocr_service_web.dart         # OCR via Gemini API (web)
-    └── ocr_service_mobile.dart      # OCR via ML Kit (mobile — não usado na web)
+    ├── ocr_service_web.dart         # OCR via Gemini API (web) — modelo gemini-2.5-flash
+    ├── ocr_service_mobile.dart      # OCR via ML Kit (mobile — não usado na web)
+    └── todoist_service.dart         # Integração Todoist REST API v2 (push/pull bidirecional)
 
 assets/
 └── images/
@@ -87,6 +108,7 @@ Texto principal: `#2D2D2D` (escuro neutro).
 | `priority` | `bool` | Prioridade alta (`!`) |
 | `inProgress` | `bool` | Em andamento (`~`) |
 | `dueDate` | `DateTime?` | Prazo (null = sem prazo) |
+| `todoistId` | `String?` | ID da tarefa no Todoist (null = não sincronizada) |
 
 ### `EventItem` (`scan_result.dart`)
 | Campo | Tipo | Descrição |
@@ -117,11 +139,14 @@ Texto principal: `#2D2D2D` (escuro neutro).
 
 ## Persistência (SharedPreferences / localStorage)
 
+Dados salvos por dispositivo/browser. **Não sincronizam entre dispositivos** (Firebase planejado para futuro).
+
 | Chave | Conteúdo |
 |---|---|
 | `scan_history` | JSON de `List<ScanResult>` |
 | `activity_groups` | JSON de `List<ActivityGroup>` |
 | `gemini_api_key` | String da API key do Gemini |
+| `todoist_token` | String do token pessoal do Todoist |
 
 ---
 
@@ -137,8 +162,8 @@ Texto principal: `#2D2D2D` (escuro neutro).
 
 ## OCR (Gemini API)
 
-- **Modelo:** `gemini-2.0-flash`
-- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=API_KEY`
+- **Modelo:** `gemini-2.5-flash` (trocado de `gemini-2.0-flash` que foi descontinuado para novas chaves)
+- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=API_KEY`
 - **Arquivo:** `lib/services/ocr_service_web.dart`
 - A API key é lida do SharedPreferences (`gemini_api_key`) em cada chamada
 - Erros tratados: `400` → API key inválida, `429` → lança `Exception('RATE_LIMIT: ...')`
@@ -155,10 +180,25 @@ Texto principal: `#2D2D2D` (escuro neutro).
 
 ---
 
+## Integração Todoist (`todoist_service.dart`)
+
+- **API:** REST v2 — `https://api.todoist.com/rest/v2/`
+- **Auth:** `Authorization: Bearer TOKEN` (token salvo em `todoist_token` no SharedPreferences)
+- **Push:** tarefas sem `todoistId` são criadas no Todoist; tarefas concluídas com `todoistId` são fechadas
+- **Pull:** tarefas ativas do Todoist sem correspondente local são importadas num grupo "Todoist"
+- **Botão:** ícone `↻` no AppBar da HomeScreen; mostra spinner enquanto sincroniza
+- **Token:** configurado em Configurações → campo "Todoist Token"
+  - Obter em: todoist.com → Configurações → Integrações → Token da API
+
+---
+
 ## Padrões importantes
 
 ### Toggle de tarefa
-O toque no ícone alterna apenas `completed`. O campo `inProgress` **nunca** é alterado pelo toggle — somente pelo dialog de edição (toque longo na tarefa em `GroupDetailScreen`).
+Ciclo circular de 3 estados via clique no ícone (`group_detail_screen.dart`, `_toggleTask()`):
+- **Aberta** (completed=false, inProgress=false) → **Em andamento** (inProgress=true) → **Concluída** (completed=true) → **Aberta**
+
+O campo `inProgress` também pode ser alterado pelo dialog de edição (toque longo).
 
 ### Edição de tarefa (toque longo)
 Bottom sheet com: texto editável, 3 botões de status (Pendente / Andamento / Concluída), toggle de prioridade, date picker de prazo, e seletor "Mover para grupo".
@@ -192,7 +232,7 @@ Após extrair o texto de cada tarefa, o método `_extractDueDate()` aplica regex
 |---|---|---|
 | `shared_preferences` | 2.5.5 | Persistência local (localStorage no web via `shared_preferences_web` 2.4.3) |
 | `image_picker` | — | Seleção de imagens (câmera / galeria) |
-| `http` | — | Chamadas à API do Gemini |
+| `http` | — | Chamadas à API do Gemini e Todoist |
 | `uuid` | — | Geração de IDs únicos nos modelos |
 | `intl` | 0.19.0 | Formatação de datas (`DateFormat`) |
 
@@ -200,10 +240,15 @@ Após extrair o texto de cada tarefa, o método `_extractDueDate()` aplica regex
 
 ## Armadilhas conhecidas
 
-### `MissingPluginException` para `shared_preferences` no Flutter Web
-**Causa:** A pasta de cache do build de release em `.dart_tool/flutter_build/<hash>/` pode ter um `web_plugin_registrant.dart` desatualizado (gerado antes de `shared_preferences` ser adicionado ao `pubspec.yaml`). O build incremental reutiliza essa pasta sem regenerar o registrante, então `SharedPreferencesPlugin.registerWith(registrar)` nunca é chamado — o fallback de MethodChannel é usado e não há handler no web, resultando na exceção.
+### Tela em branco no GitHub Pages
+**Causa:** Build sem `--base-href` faz o app tentar carregar assets de `/` em vez de `/papel-create/`.
 
-**Fix:** Apagar `.dart_tool/flutter_build` inteiro antes de rebuildar:
+**Fix:** Sempre usar `--base-href '/papel-create/'` no build de deploy. Build local não precisa da flag.
+
+### `MissingPluginException` para `shared_preferences` no Flutter Web
+**Causa:** Cache desatualizado em `.dart_tool/flutter_build/<hash>/web_plugin_registrant.dart`.
+
+**Fix:**
 ```bash
 rm -rf .dart_tool/flutter_build
 flutter pub get
@@ -211,14 +256,21 @@ flutter build web --no-tree-shake-icons --release --pwa-strategy=none
 ```
 
 ### Service worker cacheando versão antiga
-**Causa:** Flutter Web registra um service worker que armazena `main.dart.js` em cache. Mesmo após rebuildar, o browser pode servir o JS antigo.
+**Causa:** Flutter Web registra um service worker que armazena `main.dart.js` em cache.
 
-**Fix:** Buildar com `--pwa-strategy=none` gera `flutter_service_worker.js` vazio e remove o `serviceWorkerSettings` do `flutter_bootstrap.js`. Para sessões de browser já abertas com SW ativo, usar **aba anônima** ou unregistrar o SW em DevTools → Application → Service Workers.
+**Fix:** Buildar com `--pwa-strategy=none`. Para sessões já abertas, usar **aba anônima** ou unregistrar o SW em DevTools → Application → Service Workers.
 
 ### `pickImage()` não abre o seletor de arquivos no web
-**Causa:** O browser exige que `pickImage()` seja chamado diretamente no handler de gesto ("trusted event"). Qualquer `await` antes da chamada (ex: `_checkApiKey()`) invalida o contexto e o browser bloqueia silenciosamente.
+**Causa:** Qualquer `await` antes de `pickImage()` invalida o contexto de gesto do browser.
 
 **Fix:** `pickImage()` deve ser o **primeiro** `await` dentro de `_scan()`.
 
 ### `debugPrint` não aparece no console em builds de release
 `debugPrint` é no-op em release. Usar `print()` para logs em `FlutterError.onError` e `runZonedGuarded`.
+
+### Modelo Gemini descontinuado para novas chaves
+`gemini-2.0-flash` e `gemini-1.5-flash` retornam 404 para chaves novas. Usar `gemini-2.5-flash`.
+Para verificar modelos disponíveis na chave:
+```bash
+curl "https://generativelanguage.googleapis.com/v1beta/models?key=SUA_KEY"
+```
