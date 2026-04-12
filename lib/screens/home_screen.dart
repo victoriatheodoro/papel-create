@@ -8,6 +8,7 @@ import '../services/notification_service.dart';
 import '../services/ocr_service.dart';
 import '../services/todoist_service.dart';
 import '../widgets/mini_calendar.dart';
+import '../widgets/onboarding_overlay.dart';
 import 'group_detail_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _processing = false;
   bool _syncing = false;
   bool _calendarOpen = false;
+  bool _showOnboarding = false;
   List<ScanResult> _history = [];
   List<ActivityGroup> _groups = [];
 
@@ -38,6 +40,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     await Future.wait([_loadHistory(), _loadGroups()]);
     _checkNotifications();
+    _checkOnboarding();
+  }
+
+  Future<void> _checkOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('onboarding_done') != true) {
+      if (mounted) setState(() => _showOnboarding = true);
+    }
   }
 
   Future<void> _checkNotifications() async {
@@ -622,10 +632,13 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Configurações',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+              _checkOnboarding();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.add, size: 26),
@@ -649,7 +662,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (_calendarOpen)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: MiniCalendar(eventsByDate: _eventsByDate),
+                          child: MiniCalendar(
+                            eventsByDate: _eventsByDate,
+                            onEventTap: (ce) {
+                              setState(() => _calendarOpen = false);
+                              final group = ce.groupId == null
+                                  ? null
+                                  : _groups.cast<ActivityGroup?>().firstWhere(
+                                      (g) => g?.id == ce.groupId,
+                                      orElse: () => null);
+                              _openGroup(group);
+                            },
+                          ),
                         ),
                       GestureDetector(
                         onTap: () => setState(() => _calendarOpen = !_calendarOpen),
@@ -687,6 +711,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
+                if (_showOnboarding)
+                  OnboardingOverlay(
+                    onDone: () async {
+                      setState(() => _showOnboarding = false);
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('onboarding_done', true);
+                    },
+                  ),
               ],
             ),
     );
@@ -747,14 +779,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return DateTime(year, month, day);
   }
 
-  Map<DateTime, List<EventItem>> get _eventsByDate {
-    final map = <DateTime, List<EventItem>>{};
+  Map<DateTime, List<CalendarEvent>> get _eventsByDate {
+    final map = <DateTime, List<CalendarEvent>>{};
     for (final scan in _history) {
+      final matchedGroup = scan.groupId == null
+          ? null
+          : _groups.cast<ActivityGroup?>().firstWhere(
+              (g) => g?.id == scan.groupId,
+              orElse: () => null);
+      final groupName = matchedGroup?.name ?? 'Geral';
       for (final event in scan.events) {
         final dt = _parseEventDate(event.date);
         if (dt != null) {
           final key = DateTime(dt.year, dt.month, dt.day);
-          map.putIfAbsent(key, () => []).add(event);
+          map.putIfAbsent(key, () => []).add(CalendarEvent(
+            event: event,
+            groupId: scan.groupId,
+            groupName: groupName,
+          ));
         }
       }
     }

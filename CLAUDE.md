@@ -25,8 +25,9 @@ cd build/web && python -m http.server 8080
 ## Deploy no GitHub Pages
 
 ```bash
-# 1. Build com base-href (OBRIGATÓRIO para GitHub Pages)
-powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' build web --no-tree-shake-icons --release --pwa-strategy=none '--base-href=/papel-create/'"
+# 1. Build com base-href + chave Gemini embutida (OBRIGATÓRIO para GitHub Pages)
+# Substitua SUA_CHAVE_AQUI pela chave real (não commitar no repositório!)
+powershell.exe -Command "& 'C:\Users\jhona\.puro\envs\stable\flutter\bin\flutter.bat' build web --no-tree-shake-icons --release --pwa-strategy=none '--base-href=/papel-create/' '--dart-define=GEMINI_KEY=SUA_CHAVE_AQUI'"
 
 # 2. Copiar build para FORA do repo (ao trocar branch o build some pois build/ é gitignored)
 rm -rf C:/Users/jhona/AppData/Local/Temp/papel-deploy
@@ -64,12 +65,15 @@ lib/
 │   ├── group_detail_screen.dart     # Detalhe de um grupo: tarefas e eventos
 │   ├── review_screen.dart           # Revisão de scan antes de salvar
 │   ├── history_screen.dart          # Histórico de scans
-│   └── settings_screen.dart        # Configurações (Gemini API key + Todoist token)
-└── services/
-    ├── ocr_service.dart             # Fachada com import condicional
-    ├── ocr_service_web.dart         # OCR via Gemini API (web) — modelo gemini-2.5-flash
-    ├── ocr_service_mobile.dart      # OCR via ML Kit (mobile — não usado na web)
-    └── todoist_service.dart         # Integração Todoist REST API v2 (push/pull bidirecional)
+│   └── settings_screen.dart        # Configurações (Gemini API key oculta se embutida + Todoist token)
+├── services/
+│   ├── ocr_service.dart             # Fachada com import condicional
+│   ├── ocr_service_web.dart         # OCR via Gemini API (web) — modelo gemini-2.5-flash
+│   ├── ocr_service_mobile.dart      # OCR via ML Kit (mobile — não usado na web)
+│   └── todoist_service.dart         # Integração Todoist REST API v2 (push/pull bidirecional)
+└── widgets/
+    ├── mini_calendar.dart           # Mini-calendário flutuante; CalendarEvent (event + groupId + groupName)
+    └── onboarding_overlay.dart      # Tutorial overlay 4 passos (exibido na primeira abertura)
 
 assets/
 └── images/

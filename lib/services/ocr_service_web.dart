@@ -4,9 +4,14 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Chave embutida no build via --dart-define=GEMINI_KEY=AIza...
+// Se vazia, usa a chave configurada pelo usuário em Configurações.
+const _builtInKey = String.fromEnvironment('GEMINI_KEY', defaultValue: '');
+
 Future<String> extractText(XFile file) async {
   final prefs = await SharedPreferences.getInstance();
-  final apiKey = prefs.getString('gemini_api_key') ?? '';
+  final storedKey = prefs.getString('gemini_api_key') ?? '';
+  final apiKey = _builtInKey.isNotEmpty ? _builtInKey : storedKey;
 
   if (apiKey.isEmpty) {
     throw Exception('API_KEY_MISSING');

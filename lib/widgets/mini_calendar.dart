@@ -1,10 +1,26 @@
 import 'package:flutter/material.dart';
 import '../models/scan_result.dart';
 
-class MiniCalendar extends StatefulWidget {
-  final Map<DateTime, List<EventItem>> eventsByDate;
+class CalendarEvent {
+  final EventItem event;
+  final String? groupId;
+  final String groupName;
+  const CalendarEvent({
+    required this.event,
+    this.groupId,
+    this.groupName = 'Geral',
+  });
+}
 
-  const MiniCalendar({super.key, required this.eventsByDate});
+class MiniCalendar extends StatefulWidget {
+  final Map<DateTime, List<CalendarEvent>> eventsByDate;
+  final void Function(CalendarEvent) onEventTap;
+
+  const MiniCalendar({
+    super.key,
+    required this.eventsByDate,
+    required this.onEventTap,
+  });
 
   @override
   State<MiniCalendar> createState() => _MiniCalendarState();
@@ -81,7 +97,7 @@ class _MiniCalendarState extends State<MiniCalendar> {
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: events.map((e) {
+          children: events.map((ce) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -99,15 +115,42 @@ class _MiniCalendarState extends State<MiniCalendar> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(e.text,
+                        Text(ce.event.text,
                             style: const TextStyle(
                                 fontSize: 13, color: Color(0xFF2D2D2D))),
-                        if (e.time != null && e.time!.isNotEmpty)
-                          Text(e.time!,
+                        if (ce.event.time != null && ce.event.time!.isNotEmpty)
+                          Text(ce.event.time!,
                               style: TextStyle(
                                   fontSize: 11, color: Colors.grey[500])),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0EAF7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            ce.groupName,
+                            style: const TextStyle(
+                                fontSize: 10,
+                                color: Color(0xFFC17FD4),
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios,
+                        size: 14, color: Color(0xFFC17FD4)),
+                    tooltip: 'Ver no grupo',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onEventTap(ce);
+                    },
                   ),
                 ],
               ),

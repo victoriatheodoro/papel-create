@@ -31,10 +31,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  static const _builtInKey =
+      String.fromEnvironment('GEMINI_KEY', defaultValue: '');
+
   Future<void> _save() async {
     final geminiKey = _geminiCtrl.text.trim();
     final todoistToken = _todoistCtrl.text.trim();
-    if (geminiKey.isEmpty) return;
+    // Se a chave está embutida, não exige campo Gemini preenchido
+    if (_builtInKey.isEmpty && geminiKey.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('gemini_api_key', geminiKey);
     if (todoistToken.isNotEmpty) {
@@ -60,83 +64,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Instrucoes Gemini
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0EAF7),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 18, color: Color(0xFF2D2D2D)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Como obter sua API key gratuita',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+            // Instrucoes e campo Gemini (oculto quando chave embutida no build)
+            if (_builtInKey.isEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0EAF7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 18, color: Color(0xFF2D2D2D)),
+                        SizedBox(width: 8),
+                        Text(
+                          'Como obter sua API key gratuita',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _Step('1', 'Acesse aistudio.google.com'),
-                  _Step('2', 'Faça login com sua conta Google'),
-                  _Step('3', 'Clique em "Get API Key" → "Create API key"'),
-                  _Step('4', 'Copie a key e cole abaixo'),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Gratuito: 1.500 scans/dia',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.green[700],
-                      fontWeight: FontWeight.w600,
+                      ],
                     ),
+                    const SizedBox(height: 10),
+                    _Step('1', 'Acesse aistudio.google.com'),
+                    _Step('2', 'Faça login com sua conta Google'),
+                    _Step('3', 'Clique em "Get API Key" → "Create API key"'),
+                    _Step('4', 'Copie a key e cole abaixo'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Gratuito: 1.500 scans/dia',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green[700],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              // ─── Gemini ─────────────────────────────────────────────────────
+              const Text(
+                'Gemini API Key',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: Color(0xFF2D2D2D),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _geminiCtrl,
+                obscureText: _obscureGemini,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'AIzaSy...',
+                  hintStyle: TextStyle(color: Colors.grey[400]),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFDDDCD7)),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            // ─── Gemini ───────────────────────────────────────────────────────
-            const Text(
-              'Gemini API Key',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color: Color(0xFF2D2D2D),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _geminiCtrl,
-              obscureText: _obscureGemini,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'AIzaSy...',
-                hintStyle: TextStyle(color: Colors.grey[400]),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFDDDCD7)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFDDDCD7)),
-                ),
-                suffixIcon: IconButton(
-                  icon: Icon(_obscureGemini
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined),
-                  onPressed: () => setState(() => _obscureGemini = !_obscureGemini),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFDDDCD7)),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureGemini
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
+                    onPressed: () =>
+                        setState(() => _obscureGemini = !_obscureGemini),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 32),
+              const SizedBox(height: 32),
+            ],
             // ─── Todoist ──────────────────────────────────────────────────────
             const Text(
               'Todoist Token (opcional)',
@@ -197,10 +204,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: _resetOnboarding,
+                icon: const Icon(Icons.help_outline, size: 18),
+                label: const Text(
+                  'Ver tutorial novamente',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFC17FD4),
+                  side: const BorderSide(color: Color(0xFFC17FD4)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _resetOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('onboarding_done');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Tutorial será exibido ao voltar para a tela inicial.'),
+        backgroundColor: Color(0xFFC17FD4),
+      ),
+    );
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) Navigator.pop(context);
   }
 
   @override
