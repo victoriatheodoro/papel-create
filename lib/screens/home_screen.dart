@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/activity_group.dart';
 import '../models/scan_result.dart';
+import '../services/notification_service.dart';
 import '../services/ocr_service.dart';
 import '../services/todoist_service.dart';
 import '../widgets/mini_calendar.dart';
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _picker = ImagePicker();
   bool _processing = false;
   bool _syncing = false;
+  bool _calendarOpen = false;
   List<ScanResult> _history = [];
   List<ActivityGroup> _groups = [];
 
@@ -35,6 +37,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     await Future.wait([_loadHistory(), _loadGroups()]);
+    _checkNotifications();
+  }
+
+  Future<void> _checkNotifications() async {
+    final granted = await NotificationService.requestPermission();
+    if (!granted) return;
+
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+
+    // Tarefas vencendo hoje
+    final tasksDueToday = <String>[];
+    for (final scan in _history) {
+      for (final task in scan.tasks) {
+        if (task.completed) continue;
+        if (task.dueDate == null) continue;
+        final due = DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day);
+        if (due == todayOnly) tasksDueToday.add(task.text);
+      }
+    }
+
+    // Eventos de hoje
+    final eventsToday = <String>[];
+    for (final scan in _history) {
+      for (final event in scan.events) {
+        final dt = _parseEventDate(event.date);
+        if (dt != null) {
+          final d = DateTime(dt.year, dt.month, dt.day);
+          if (d == todayOnly) eventsToday.add(event.text);
+        }
+      }
+    }
+
+    if (tasksDueToday.isNotEmpty) {
+      NotificationService.show(
+        '📋 ${tasksDueToday.length} tarefa(s) vencem hoje',
+        body: tasksDueToday.take(3).join(', '),
+      );
+    }
+
+    if (eventsToday.isNotEmpty) {
+      NotificationService.show(
+        '📅 ${eventsToday.length} evento(s) hoje',
+        body: eventsToday.take(3).join(', '),
+      );
+    }
   }
 
   Future<void> _loadHistory() async {
@@ -594,7 +642,50 @@ class _HomeScreenState extends State<HomeScreen> {
                 Positioned(
                   bottom: 24,
                   left: 16,
-                  child: MiniCalendar(eventsByDate: _eventsByDate),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_calendarOpen)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: MiniCalendar(eventsByDate: _eventsByDate),
+                        ),
+                      GestureDetector(
+                        onTap: () => setState(() => _calendarOpen = !_calendarOpen),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC17FD4),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_month_outlined,
+                                  color: Colors.white, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                _calendarOpen ? 'Fechar' : 'Calendário',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -679,7 +770,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final overdue = _overdueTasks;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 280),
       children: [
         // Logo da marca
         Center(
