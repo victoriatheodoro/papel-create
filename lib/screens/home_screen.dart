@@ -6,6 +6,7 @@ import '../models/activity_group.dart';
 import '../models/scan_result.dart';
 import '../services/ocr_service.dart';
 import '../services/todoist_service.dart';
+import '../widgets/mini_calendar.dart';
 import 'group_detail_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
@@ -585,7 +586,18 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: _processing ? _buildLoading() : _buildBody(),
+      body: _processing
+          ? _buildLoading()
+          : Stack(
+              children: [
+                _buildBody(),
+                Positioned(
+                  bottom: 24,
+                  left: 16,
+                  child: MiniCalendar(eventsByDate: _eventsByDate),
+                ),
+              ],
+            ),
     );
   }
 
@@ -628,6 +640,34 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     return result;
+  }
+
+  DateTime? _parseEventDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return null;
+    final parts = dateStr.split('/');
+    if (parts.length < 2) return null;
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    if (day == null || month == null) return null;
+    int year = parts.length >= 3
+        ? (int.tryParse(parts[2]) ?? DateTime.now().year)
+        : DateTime.now().year;
+    if (year < 100) year += 2000;
+    return DateTime(year, month, day);
+  }
+
+  Map<DateTime, List<EventItem>> get _eventsByDate {
+    final map = <DateTime, List<EventItem>>{};
+    for (final scan in _history) {
+      for (final event in scan.events) {
+        final dt = _parseEventDate(event.date);
+        if (dt != null) {
+          final key = DateTime(dt.year, dt.month, dt.day);
+          map.putIfAbsent(key, () => []).add(event);
+        }
+      }
+    }
+    return map;
   }
 
   Widget _buildBody() {
