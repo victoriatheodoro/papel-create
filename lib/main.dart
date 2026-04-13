@@ -1,13 +1,19 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'firebase_options.dart';
 import 'models/activity_group.dart';
 import 'models/scan_result.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/review_screen.dart';
 import 'screens/splash_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     // ignore: avoid_print
@@ -56,6 +62,8 @@ class AnalogSyncApp extends StatelessWidget {
         switch (settings.name) {
           case '/splash':
             return MaterialPageRoute(builder: (_) => const SplashScreen());
+          case '/login':
+            return MaterialPageRoute(builder: (_) => const LoginScreen());
           case '/':
             return MaterialPageRoute(builder: (_) => const HomeScreen());
           case '/review':

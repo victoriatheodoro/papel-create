@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/activity_group.dart';
 import '../models/scan_result.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../services/ocr_service.dart';
 import '../services/todoist_service.dart';
@@ -11,6 +13,7 @@ import '../widgets/mini_calendar.dart';
 import '../widgets/onboarding_overlay.dart';
 import 'group_detail_screen.dart';
 import 'history_screen.dart';
+import 'search_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -38,9 +41,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-    await Future.wait([_loadHistory(), _loadGroups()]);
+    if (AuthService.isLoggedIn) {
+      await _loadFromFirestore();
+    } else {
+      await Future.wait([_loadHistory(), _loadGroups()]);
+    }
     _checkNotifications();
     _checkOnboarding();
+  }
+
+  Future<void> _loadFromFirestore() async {
+    final uid = AuthService.currentUser!.uid;
+    final fsGroups = await FirestoreService.loadGroups(uid);
+    final fsScans = await FirestoreService.loadScans(uid);
+
+    if (fsGroups.isEmpty && fsScans.isEmpty) {
+      // Primeiro login: migrar dados do localStorage para o Firestore
+      await Future.wait([_loadHistory(), _loadGroups()]);
+      await Future.wait([
+        FirestoreService.saveGroups(uid, _groups),
+        FirestoreService.saveScans(uid, _history),
+      ]);
+    } else {
+      if (mounted) {
+        setState(() {
+          _groups = fsGroups;
+          _history = fsScans;
+        });
+      }
+    }
   }
 
   Future<void> _checkOnboarding() async {
@@ -112,6 +141,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('scan_history', ScanResult.encodeList(_history));
+      if (AuthService.isLoggedIn) {
+        await FirestoreService.saveScans(AuthService.currentUser!.uid, _history);
+      }
     } catch (e) {
       // ignore: avoid_print
       print('[Storage] erro ao salvar histórico: $e');
@@ -141,9 +173,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _saveGroups([List<ActivityGroup>? groups]) async {
     try {
+      final list = groups ?? _groups;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          'activity_groups', ActivityGroup.encodeList(groups ?? _groups));
+      await prefs.setString('activity_groups', ActivityGroup.encodeList(list));
+      if (AuthService.isLoggedIn) {
+        await FirestoreService.saveGroups(AuthService.currentUser!.uid, list);
+      }
     } catch (e) {
       // ignore: avoid_print
       print('[Storage] erro ao salvar grupos: $e');
@@ -315,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const Text('Adicionar atividade',
+            const Text('Transformar em Digital',
                 style:
                     TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 24),
@@ -542,6 +577,78 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
+  void _showUserSheet() {
+    final user = AuthService.currentUser;
+    if (user == null) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFFF9F7F0),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            CircleAvatar(
+              radius: 32,
+              backgroundColor: const Color(0xFFF0EAF7),
+              backgroundImage: user.photoURL != null
+                  ? NetworkImage(user.photoURL!)
+                  : null,
+              child: user.photoURL == null
+                  ? const Icon(Icons.person, size: 32, color: Color(0xFFC17FD4))
+                  : null,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              user.displayName ?? 'Usuária',
+              style: const TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              user.email ?? '',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF888888)),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await AuthService.signOut();
+                  if (mounted) {
+                    Navigator.pushReplacementNamed(context, '/login');
+                  }
+                },
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Sair da conta'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red[700],
+                  side: BorderSide(color: Colors.red[300]!),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showLegend() {
     showModalBottomSheet(
       context: context,
@@ -583,52 +690,106 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leadingWidth: 130,
+        leadingWidth: 96,
         leading: TextButton(
           onPressed: _showLegend,
           child: const Text(
-            'Legenda de\nsímbolos',
-            textAlign: TextAlign.center,
+            'Legenda',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Color(0xFF2D2D2D),
-              height: 1.4,
             ),
           ),
         ),
-        title: const Text('Papel & Create'),
+        // Sem título — logo já aparece no corpo
         actions: [
+          // Avatar do usuário (quando logado)
+          if (AuthService.isLoggedIn)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: GestureDetector(
+                onTap: _showUserSheet,
+                child: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFFF0EAF7),
+                  backgroundImage: AuthService.currentUser?.photoURL != null
+                      ? NetworkImage(AuthService.currentUser!.photoURL!)
+                      : null,
+                  child: AuthService.currentUser?.photoURL == null
+                      ? const Icon(Icons.person, size: 18,
+                          color: Color(0xFFC17FD4))
+                      : null,
+                ),
+              ),
+            ),
+          // Busca
           IconButton(
-            icon: const Icon(Icons.history_outlined),
-            tooltip: 'Histórico',
+            icon: const Icon(Icons.search_outlined),
+            tooltip: 'Buscar',
             onPressed: () async {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => HistoryScreen(history: _history),
+                  builder: (_) => SearchScreen(
+                    history: _history,
+                    groups: _groups,
+                    onGroupOpen: (group) => _openGroup(group),
+                  ),
                 ),
               );
               setState(() {});
             },
           ),
-          _syncing
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFFC17FD4),
-                    ),
+          // Menu overflow: histórico + sync Todoist
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Mais opções',
+            onSelected: (value) async {
+              if (value == 'history') {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => HistoryScreen(history: _history),
                   ),
-                )
-              : IconButton(
-                  icon: const Icon(Icons.sync_outlined),
-                  tooltip: 'Sincronizar com Todoist',
-                  onPressed: _syncTodoist,
+                );
+                setState(() {});
+              } else if (value == 'sync') {
+                _syncTodoist();
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'history',
+                child: Row(
+                  children: [
+                    Icon(Icons.history_outlined, size: 18,
+                        color: Color(0xFF2D2D2D)),
+                    SizedBox(width: 12),
+                    Text('Histórico'),
+                  ],
                 ),
+              ),
+              PopupMenuItem(
+                value: 'sync',
+                child: Row(
+                  children: [
+                    _syncing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFC17FD4)))
+                        : const Icon(Icons.sync_outlined, size: 18,
+                            color: Color(0xFF2D2D2D)),
+                    const SizedBox(width: 12),
+                    const Text('Sincronizar Todoist'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Configurações',
@@ -642,7 +803,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.add, size: 26),
-            tooltip: 'Adicionar atividade',
+            tooltip: 'Transformar em Digital',
             onPressed: _showAddSheet,
           ),
         ],

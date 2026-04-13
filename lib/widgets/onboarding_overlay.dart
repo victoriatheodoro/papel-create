@@ -14,21 +14,25 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
   static const _steps = [
     _OnboardingStep(
       icon: Icons.auto_stories_outlined,
-      title: 'Bem-vinda ao Papel & Create!',
+      title: 'Seu caderno, agora digital!',
       body:
-          'Digitalize páginas do seu caderno e organize tarefas e eventos de forma simples.',
+          'O Papel & Create transforma as anotações do seu caderno físico em tarefas e eventos organizados — acessíveis de qualquer lugar, pelo celular ou computador.',
       alignTop: false,
       verticalFraction: 0.22,
       showSymbols: false,
+      spotlight: Alignment(0, -0.55),
+      spotlightRadius: 80,
     ),
     _OnboardingStep(
       icon: Icons.add_circle_outline,
-      title: 'Adicionar atividade',
+      title: 'Transformar em Digital',
       body:
           'Toque no ícone "+" no canto superior direito para escanear uma página do caderno ou criar uma atividade manualmente.',
       alignTop: true,
-      verticalFraction: 0.12,
+      verticalFraction: 0.13,
       showSymbols: false,
+      spotlight: Alignment(0.95, -0.97),
+      spotlightRadius: 30,
     ),
     _OnboardingStep(
       icon: Icons.edit_note_outlined,
@@ -36,8 +40,10 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       body:
           'Para o app ler corretamente seu caderno, use estes símbolos. Apenas eles são reconhecidos no escaneamento:',
       alignTop: false,
-      verticalFraction: 0.55,
+      verticalFraction: 0.52,
       showSymbols: true,
+      spotlight: null,
+      spotlightRadius: 0,
     ),
     _OnboardingStep(
       icon: Icons.folder_outlined,
@@ -45,17 +51,21 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       body:
           'Seus grupos organizam tarefas e eventos. Toque num card para ver, editar e acompanhar o progresso.',
       alignTop: false,
-      verticalFraction: 0.5,
+      verticalFraction: 0.46,
       showSymbols: false,
+      spotlight: Alignment(0, 0.05),
+      spotlightRadius: 90,
     ),
     _OnboardingStep(
       icon: Icons.calendar_month_outlined,
       title: 'Mini-calendário',
       body:
           'O botão "Calendário" no canto inferior esquerdo mostra seus eventos por data. Toque num dia marcado para ver detalhes e navegar ao grupo.',
-      alignTop: true,
-      verticalFraction: 0.78,
+      alignTop: false,
+      verticalFraction: 0.18,
       showSymbols: false,
+      spotlight: Alignment(-0.94, 0.94),
+      spotlightRadius: 38,
     ),
   ];
 
@@ -77,22 +87,28 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       color: Colors.transparent,
       child: Stack(
         children: [
-          // Fundo escuro semi-transparente
+          // Overlay escuro com spotlight (buraco no elemento destacado)
           GestureDetector(
             onTap: _next,
-            child: Container(
+            child: SizedBox(
               width: size.width,
               height: size.height,
-              color: Colors.black.withOpacity(0.65),
+              child: CustomPaint(
+                painter: _SpotlightPainter(
+                  spotlight: step.spotlight,
+                  spotlightRadius: step.spotlightRadius,
+                ),
+              ),
             ),
           ),
           // Balão de dica
           Positioned(
-            left: 20,
-            right: 20,
+            left: 16,
+            right: 16,
             top: step.alignTop ? size.height * step.verticalFraction : null,
-            bottom:
-                step.alignTop ? null : size.height * (1 - step.verticalFraction),
+            bottom: step.alignTop
+                ? null
+                : size.height * (1 - step.verticalFraction),
             child: _TooltipBalloon(
               icon: step.icon,
               title: step.title,
@@ -117,6 +133,8 @@ class _OnboardingStep {
   final bool alignTop;
   final double verticalFraction;
   final bool showSymbols;
+  final Alignment? spotlight;
+  final double spotlightRadius;
 
   const _OnboardingStep({
     required this.icon,
@@ -125,7 +143,55 @@ class _OnboardingStep {
     required this.alignTop,
     required this.verticalFraction,
     required this.showSymbols,
+    required this.spotlight,
+    required this.spotlightRadius,
   });
+}
+
+class _SpotlightPainter extends CustomPainter {
+  final Alignment? spotlight;
+  final double spotlightRadius;
+
+  const _SpotlightPainter({required this.spotlight, required this.spotlightRadius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
+
+    // Fundo escuro
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = Colors.black.withOpacity(0.65),
+    );
+
+    if (spotlight != null && spotlightRadius > 0) {
+      final center = spotlight!.withinRect(
+          Rect.fromLTWH(0, 0, size.width, size.height));
+
+      // Buraco transparente (spotlight)
+      canvas.drawCircle(
+        center,
+        spotlightRadius,
+        Paint()..blendMode = BlendMode.clear,
+      );
+
+      // Anel branco semi-transparente ao redor
+      canvas.drawCircle(
+        center,
+        spotlightRadius + 3,
+        Paint()
+          ..color = Colors.white.withOpacity(0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_SpotlightPainter old) =>
+      old.spotlight != spotlight || old.spotlightRadius != spotlightRadius;
 }
 
 class _TooltipBalloon extends StatelessWidget {
@@ -152,7 +218,7 @@ class _TooltipBalloon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -168,24 +234,23 @@ class _TooltipBalloon extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cabeçalho: ícone + título + contador
           Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: const BoxDecoration(
                   color: Color(0xFFF0EAF7),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: const Color(0xFFC17FD4), size: 20),
+                child: Icon(icon, color: const Color(0xFFC17FD4), size: 18),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF2D2D2D),
                   ),
@@ -194,27 +259,26 @@ class _TooltipBalloon extends StatelessWidget {
               Text(
                 '$step/$total',
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: Color(0xFF888888),
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             body,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               color: Color(0xFF555555),
               height: 1.5,
             ),
           ),
-          // Tabela de símbolos (apenas no passo dedicado)
           if (showSymbols) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: const Color(0xFFF9F7F0),
                 borderRadius: BorderRadius.circular(10),
@@ -230,27 +294,26 @@ class _TooltipBalloon extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             const Text(
-              'Apenas estes símbolos são lidos pelo app. Textos sem símbolo são ignorados.',
+              'Apenas estes símbolos são lidos. Textos sem símbolo são ignorados.',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 color: Color(0xFF888888),
                 fontStyle: FontStyle.italic,
                 height: 1.4,
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          // Rodapé: indicadores de passo + botão
+          const SizedBox(height: 14),
           Row(
             children: [
               Row(
                 children: List.generate(
                   total,
                   (i) => Container(
-                    width: i == step - 1 ? 16 : 6,
-                    height: 6,
+                    width: i == step - 1 ? 14 : 5,
+                    height: 5,
                     margin: const EdgeInsets.only(right: 4),
                     decoration: BoxDecoration(
                       color: i == step - 1
@@ -268,7 +331,7 @@ class _TooltipBalloon extends StatelessWidget {
                   backgroundColor: const Color(0xFFC17FD4),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 10),
+                      horizontal: 18, vertical: 9),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -276,7 +339,7 @@ class _TooltipBalloon extends StatelessWidget {
                 child: Text(
                   isLast ? 'Entendido ✓' : 'Próximo →',
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -297,12 +360,12 @@ class _SymbolRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
           Container(
-            width: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            width: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: BoxDecoration(
               color: const Color(0xFFF0EAF7),
               borderRadius: BorderRadius.circular(6),
@@ -312,19 +375,16 @@ class _SymbolRow extends StatelessWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontFamily: 'monospace',
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFFC17FD4),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Text(
             meaning,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF2D2D2D),
-            ),
+            style: const TextStyle(fontSize: 11, color: Color(0xFF2D2D2D)),
           ),
         ],
       ),
