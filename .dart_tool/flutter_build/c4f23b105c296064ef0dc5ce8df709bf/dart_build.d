@@ -1,1 +1,0 @@
- H:\\Claude\\Papelaria\\analog_sync_project\\.dart_tool\\flutter_build\\c4f23b105c296064ef0dc5ce8df709bf\\dart_build_result.json: 
