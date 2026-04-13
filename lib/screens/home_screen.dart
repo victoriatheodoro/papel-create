@@ -244,7 +244,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  static const _builtInKey =
+      String.fromEnvironment('GEMINI_KEY', defaultValue: '');
+
   Future<bool> _checkApiKey() async {
+    if (_builtInKey.isNotEmpty) return true;
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getString('gemini_api_key') ?? '').isNotEmpty;
   }
