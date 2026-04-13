@@ -60,20 +60,25 @@ lib/
 │   ├── scan_result.dart             # TaskItem, EventItem, ScanResult
 │   └── activity_group.dart          # ActivityGroup (grupos/blocos)
 ├── screens/
-│   ├── splash_screen.dart           # Splash: logo sobre fundo escuro por 2s
-│   ├── home_screen.dart             # Tela principal: logo, "Vencendo", grupos, entrada manual, sync Todoist
+│   ├── splash_screen.dart           # Splash: logo sobre fundo escuro por 2s → redireciona para /login ou /
+│   ├── login_screen.dart            # Login com Google (Firebase Auth) ou continuar sem conta
+│   ├── home_screen.dart             # Tela principal: logo, "Vencendo", grupos, busca, sync, AppBar mobile
 │   ├── group_detail_screen.dart     # Detalhe de um grupo: tarefas e eventos
 │   ├── review_screen.dart           # Revisão de scan antes de salvar
 │   ├── history_screen.dart          # Histórico de scans
-│   └── settings_screen.dart        # Configurações (Gemini API key oculta se embutida + Todoist token)
+│   ├── search_screen.dart           # Busca por palavra-chave em tarefas e eventos (ícone lupa na AppBar)
+│   └── settings_screen.dart        # Configurações (Gemini API key oculta se embutida, Todoist, logout)
 ├── services/
 │   ├── ocr_service.dart             # Fachada com import condicional
 │   ├── ocr_service_web.dart         # OCR via Gemini API (web) — modelo gemini-2.5-flash
 │   ├── ocr_service_mobile.dart      # OCR via ML Kit (mobile — não usado na web)
+│   ├── auth_service.dart            # Firebase Auth: signInWithPopup(GoogleAuthProvider), signOut
+│   ├── firestore_service.dart       # Firestore: load/save de groups e scans por uid
 │   └── todoist_service.dart         # Integração Todoist REST API v2 (push/pull bidirecional)
 └── widgets/
     ├── mini_calendar.dart           # Mini-calendário flutuante; CalendarEvent (event + groupId + groupName)
-    └── onboarding_overlay.dart      # Tutorial overlay 4 passos (exibido na primeira abertura)
+    ├── onboarding_overlay.dart      # Tutorial overlay 6 passos (exibido na primeira abertura)
+    └── search_screen.dart           # (em lib/screens/) Busca por palavra-chave em tarefas e eventos
 
 assets/
 └── images/
@@ -145,16 +150,30 @@ Texto principal: `#2D2D2D` (escuro neutro).
 
 ---
 
-## Persistência (SharedPreferences / localStorage)
+## Persistência
 
-Dados salvos por dispositivo/browser. **Não sincronizam entre dispositivos** (Firebase planejado para futuro).
+### SharedPreferences (localStorage no web)
+Dados locais por dispositivo/browser.
 
 | Chave | Conteúdo |
 |---|---|
 | `scan_history` | JSON de `List<ScanResult>` |
 | `activity_groups` | JSON de `List<ActivityGroup>` |
-| `gemini_api_key` | String da API key do Gemini |
+| `gemini_api_key` | String da API key do Gemini (ignorada se `GEMINI_KEY` embutida no build) |
 | `todoist_token` | String do token pessoal do Todoist |
+| `onboarding_done` | `'true'` após o tutorial ser concluído |
+
+### Firestore (sincronização entre dispositivos)
+Disponível quando o usuário está logado com Google. Coleções:
+- `users/{uid}/groups/{groupId}` — grupos do usuário
+- `users/{uid}/scans/{scanId}` — histórico de scans (ordenado por `scannedAt` desc)
+
+**Estratégia de carga (`home_screen.dart`):**
+1. Se logado → tenta carregar do Firestore
+2. Se Firestore vazio E localStorage tem dados → migra localStorage → Firestore (primeira vez)
+3. Se não logado → carrega só do localStorage
+
+**Estratégia de escrita:** salva em localStorage E Firestore simultaneamente quando logado.
 
 ---
 
@@ -163,8 +182,11 @@ Dados salvos por dispositivo/browser. **Não sincronizam entre dispositivos** (F
 | Rota | Widget | Argumentos |
 |---|---|---|
 | `/splash` | `SplashScreen` | — (rota inicial) |
+| `/login` | `LoginScreen` | — |
 | `/` | `HomeScreen` | — |
 | `/review` | `ReviewScreen` | `Map<String, dynamic>` com `result: ScanResult` e `groups: List<ActivityGroup>` |
+
+**Fluxo de autenticação:** Splash → verifica `AuthService.isLoggedIn` → se não logado vai para `/login`, se logado vai para `/`. `LoginScreen` oferece "Entrar com Google" (Firebase Auth) e "Continuar sem conta" (vai para `/` sem login).
 
 ---
 
@@ -229,6 +251,27 @@ Badge abaixo do texto da tarefa em `GroupDetailScreen`: vermelho = vencida, lara
 ### Parser de data no scan (`ocr_service.dart`)
 Após extrair o texto de cada tarefa, o método `_extractDueDate()` aplica regex `\s*-\s*(\d{1,2}/\d{1,2}(?:/\d{2,4})?)$` para detectar sufixo de data. Se encontrar, remove o sufixo do texto e popula `dueDate`. O prompt do Gemini (`ocr_service_web.dart`) instrui o modelo a preservar o sufixo `- dd/mm/aaaa` no campo `text` das tarefas.
 
+### AppBar mobile (`home_screen.dart`)
+Sem título (logo fica no body). Ações: avatar (se logado) → ícone lupa (busca) → menu `⋮` (histórico + sync Todoist) → ícone configurações → ícone `+`. `leadingWidth: 96` com texto "Legenda". Evitar adicionar mais ações — a barra já está compacta no mobile.
+
+### Tutorial de onboarding (`onboarding_overlay.dart`)
+6 passos. Exibido na primeira abertura (chave `onboarding_done` no SharedPreferences). Pode ser revisto em Configurações → "Ver tutorial novamente" (remove a chave).
+
+**Posicionamento dos balões:**
+- `alignTop: true, verticalFraction: X` → topo do balão em `X * screenHeight` do topo
+- `alignTop: false, verticalFraction: X` → fundo do balão em `X * screenHeight` do topo
+- Para balões sempre visíveis no mobile (800px, balão ~200px), usar `alignTop: true` com fração entre 0.09 e 0.55
+
+**Spotlights (Alignment → coordenadas na tela 360×800px):**
+- `x = W/2 * (1 + dx)`, `y = H/2 * (1 + dy)`
+- Botão `+` (AppBar): `Alignment(0.88, -0.86)` → (~338px, ~56px)
+- Lupa (AppBar): `Alignment(0.48, -0.86)` → (~266px, ~56px)
+- Logo: `Alignment(0, -0.65)` → (180px, ~140px)
+- Calendário (bottom-left): `Alignment(-0.60, 0.90)` → (~72px, ~760px)
+
+### Busca (`search_screen.dart`)
+Recebe `history: List<ScanResult>` e `groups: List<ActivityGroup>`. Busca em tempo real por `task.text` e `event.text`. Toque no resultado chama `widget.onGroupOpen(group)` após `Navigator.pop()`.
+
 ### Galeria no Flutter Web (`home_screen.dart`)
 `pickImage()` deve ser a **primeira** operação `await` dentro de `_scan()` — antes de qualquer outro await (incluindo `_checkApiKey()`). O browser só abre o seletor de arquivos em resposta direta a um gesto do usuário; qualquer `await` intermediário quebra o "trusted event context" e o seletor é silenciosamente bloqueado.
 
@@ -239,10 +282,15 @@ Após extrair o texto de cada tarefa, o método `_extractDueDate()` aplica regex
 | Pacote | Versão (lock) | Uso |
 |---|---|---|
 | `shared_preferences` | 2.5.5 | Persistência local (localStorage no web via `shared_preferences_web` 2.4.3) |
+| `firebase_core` | ^3.6.0 | Inicialização do Firebase (`Firebase.initializeApp`) |
+| `firebase_auth` | ^5.3.0 | Autenticação Google via `signInWithPopup` |
+| `cloud_firestore` | ^5.4.0 | Sincronização de dados entre dispositivos |
 | `image_picker` | — | Seleção de imagens (câmera / galeria) |
 | `http` | — | Chamadas à API do Gemini e Todoist |
 | `uuid` | — | Geração de IDs únicos nos modelos |
 | `intl` | 0.19.0 | Formatação de datas (`DateFormat`) |
+
+**IMPORTANTE:** NÃO usar `google_sign_in` — retorna `null` no Flutter Web. Usar `signInWithPopup(GoogleAuthProvider())` do `firebase_auth` diretamente.
 
 ---
 
@@ -281,4 +329,15 @@ flutter build web --no-tree-shake-icons --release --pwa-strategy=none
 Para verificar modelos disponíveis na chave:
 ```bash
 curl "https://generativelanguage.googleapis.com/v1beta/models?key=SUA_KEY"
+```
+
+### Google Sign-In retorna null no Flutter Web
+**NÃO usar** o pacote `google_sign_in` — `googleUser.authentication` retorna `accessToken: null` no web.
+**Fix:** usar `FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider())` diretamente (`auth_service.dart`).
+
+### Deploy — pasta `build/` fica com arquivos extras
+Ao usar `git rm -rf .` na branch `gh-pages` e depois `cp -r build/web/.`, certificar-se de NÃO incluir `.dart_tool/`, `build/` aninhado ou `c/` (SDK Flutter). Usar `git add` com arquivos específicos:
+```bash
+git add index.html main.dart.js flutter.js flutter_bootstrap.js flutter_service_worker.js favicon.png manifest.json version.json assets/ canvaskit/ icons/
+git add -u  # para staged deletions dos arquivos antigos
 ```
