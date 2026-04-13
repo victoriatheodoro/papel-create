@@ -2,7 +2,16 @@ import 'package:flutter/material.dart';
 
 class OnboardingOverlay extends StatefulWidget {
   final VoidCallback onDone;
-  const OnboardingOverlay({super.key, required this.onDone});
+  /// Posições exatas (em pixels de tela) para o spotlight de cada passo.
+  /// Se o offset do passo for não-nulo, ele sobrescreve o Alignment estático.
+  /// Use GlobalKey + RenderBox.localToGlobal para obter offsets precisos.
+  final List<Offset?> spotlightOffsets;
+
+  const OnboardingOverlay({
+    super.key,
+    required this.onDone,
+    this.spotlightOffsets = const [],
+  });
 
   @override
   State<OnboardingOverlay> createState() => _OnboardingOverlayState();
@@ -51,7 +60,7 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       body:
           'Para o app ler corretamente seu caderno, use estes símbolos. Apenas eles são reconhecidos no escaneamento:',
       alignTop: false,
-      verticalFraction: 0.52,
+      verticalFraction: 0.78,
       showSymbols: true,
       spotlight: null,
       spotlightRadius: 0,
@@ -94,6 +103,12 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
     final size = MediaQuery.of(context).size;
     final isLast = _step == _steps.length - 1;
 
+    // Usa offset exato (medido via GlobalKey) se disponível; caso contrário
+    // usa o Alignment estático do passo.
+    final exactOffset = _step < widget.spotlightOffsets.length
+        ? widget.spotlightOffsets[_step]
+        : null;
+
     return Material(
       color: Colors.transparent,
       child: Stack(
@@ -107,6 +122,7 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
               child: CustomPaint(
                 painter: _SpotlightPainter(
                   spotlight: step.spotlight,
+                  exactOffset: exactOffset,
                   spotlightRadius: step.spotlightRadius,
                 ),
               ),
@@ -161,9 +177,14 @@ class _OnboardingStep {
 
 class _SpotlightPainter extends CustomPainter {
   final Alignment? spotlight;
+  final Offset? exactOffset; // posição exata medida via GlobalKey (prioridade)
   final double spotlightRadius;
 
-  const _SpotlightPainter({required this.spotlight, required this.spotlightRadius});
+  const _SpotlightPainter({
+    required this.spotlight,
+    required this.spotlightRadius,
+    this.exactOffset,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -175,10 +196,13 @@ class _SpotlightPainter extends CustomPainter {
       Paint()..color = Colors.black.withOpacity(0.65),
     );
 
-    if (spotlight != null && spotlightRadius > 0) {
-      final center = spotlight!.withinRect(
-          Rect.fromLTWH(0, 0, size.width, size.height));
+    // Determina o centro: usa offset exato se disponível, senão Alignment
+    final Offset? center = exactOffset ??
+        (spotlight != null
+            ? spotlight!.withinRect(Rect.fromLTWH(0, 0, size.width, size.height))
+            : null);
 
+    if (center != null && spotlightRadius > 0) {
       // Buraco transparente (spotlight)
       canvas.drawCircle(
         center,
@@ -202,7 +226,9 @@ class _SpotlightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SpotlightPainter old) =>
-      old.spotlight != spotlight || old.spotlightRadius != spotlightRadius;
+      old.spotlight != spotlight ||
+      old.exactOffset != exactOffset ||
+      old.spotlightRadius != spotlightRadius;
 }
 
 class _TooltipBalloon extends StatelessWidget {

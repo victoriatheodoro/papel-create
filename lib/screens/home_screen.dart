@@ -34,6 +34,13 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ScanResult> _history = [];
   List<ActivityGroup> _groups = [];
 
+  // GlobalKeys para medir posição exata dos elementos do tutorial
+  final _logoKey = GlobalKey();
+  final _addButtonKey = GlobalKey();
+  final _searchButtonKey = GlobalKey();
+  final _calendarButtonKey = GlobalKey();
+  List<Offset?> _spotlightOffsets = List.filled(6, null);
+
   @override
   void initState() {
     super.initState();
@@ -75,8 +82,28 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _checkOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('onboarding_done') != true) {
-      if (mounted) setState(() => _showOnboarding = true);
+      // Aguarda o frame completo para que os GlobalKeys estejam disponíveis
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _spotlightOffsets = [
+            _getWidgetCenter(_logoKey),         // passo 1: logo
+            _getWidgetCenter(_addButtonKey),    // passo 2: botão +
+            _getWidgetCenter(_searchButtonKey), // passo 3: lupa
+            null,                               // passo 4: símbolos (sem spotlight)
+            null,                               // passo 5: grupos (área ampla, usa Alignment)
+            _getWidgetCenter(_calendarButtonKey), // passo 6: calendário
+          ];
+          _showOnboarding = true;
+        });
+      });
     }
+  }
+
+  Offset? _getWidgetCenter(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return null;
+    return box.localToGlobal(box.size.center(Offset.zero));
   }
 
   Future<void> _checkNotifications() async {
@@ -729,6 +756,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           // Busca
           IconButton(
+            key: _searchButtonKey,
             icon: const Icon(Icons.search_outlined),
             tooltip: 'Buscar',
             onPressed: () async {
@@ -806,6 +834,7 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           IconButton(
+            key: _addButtonKey,
             icon: const Icon(Icons.add, size: 26),
             tooltip: 'Transformar em Digital',
             onPressed: _showAddSheet,
@@ -841,6 +870,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       GestureDetector(
+                        key: _calendarButtonKey,
                         onTap: () => setState(() => _calendarOpen = !_calendarOpen),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -878,6 +908,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 if (_showOnboarding)
                   OnboardingOverlay(
+                    spotlightOffsets: _spotlightOffsets,
                     onDone: () async {
                       setState(() => _showOnboarding = false);
                       final prefs = await SharedPreferences.getInstance();
@@ -983,7 +1014,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Center(
           child: Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 20),
-            child: Image.asset('assets/images/logo.png', width: 220),
+            child: Image.asset('assets/images/logo.png', width: 220, key: _logoKey),
           ),
         ),
 
