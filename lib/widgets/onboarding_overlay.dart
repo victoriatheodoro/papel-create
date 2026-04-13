@@ -17,10 +17,10 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       title: 'Seu caderno, agora digital!',
       body:
           'O Papel & Create transforma as anotações do seu caderno físico em tarefas e eventos organizados — acessíveis de qualquer lugar, pelo celular ou computador.',
-      alignTop: false,
-      verticalFraction: 0.22,
+      alignTop: true,
+      verticalFraction: 0.25,
       showSymbols: false,
-      spotlight: Alignment(0, -0.55),
+      spotlight: Alignment(0, -0.65),
       spotlightRadius: 80,
     ),
     _OnboardingStep(
@@ -29,9 +29,20 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       body:
           'Toque no ícone "+" no canto superior direito para escanear uma página do caderno ou criar uma atividade manualmente.',
       alignTop: true,
-      verticalFraction: 0.13,
+      verticalFraction: 0.10,
       showSymbols: false,
-      spotlight: Alignment(0.95, -0.97),
+      spotlight: Alignment(0.88, -0.86),
+      spotlightRadius: 30,
+    ),
+    _OnboardingStep(
+      icon: Icons.search_outlined,
+      title: 'Busca rápida',
+      body:
+          'Toque no ícone de lupa para pesquisar tarefas e eventos por palavra-chave. Útil para encontrar rapidamente algo que você anotou.',
+      alignTop: true,
+      verticalFraction: 0.10,
+      showSymbols: false,
+      spotlight: Alignment(0.48, -0.86),
       spotlightRadius: 30,
     ),
     _OnboardingStep(
@@ -50,10 +61,10 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       title: 'Grupos',
       body:
           'Seus grupos organizam tarefas e eventos. Toque num card para ver, editar e acompanhar o progresso.',
-      alignTop: false,
-      verticalFraction: 0.46,
+      alignTop: true,
+      verticalFraction: 0.09,
       showSymbols: false,
-      spotlight: Alignment(0, 0.05),
+      spotlight: Alignment(0, -0.10),
       spotlightRadius: 90,
     ),
     _OnboardingStep(
@@ -61,10 +72,10 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
       title: 'Mini-calendário',
       body:
           'O botão "Calendário" no canto inferior esquerdo mostra seus eventos por data. Toque num dia marcado para ver detalhes e navegar ao grupo.',
-      alignTop: false,
-      verticalFraction: 0.18,
+      alignTop: true,
+      verticalFraction: 0.55,
       showSymbols: false,
-      spotlight: Alignment(-0.94, 0.94),
+      spotlight: Alignment(-0.60, 0.90),
       spotlightRadius: 38,
     ),
   ];
